@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>بانک محتوای تربیتی صالحات</title>
+<meta name="description" content="منابع و طرح درس‌های موردنیاز مربیان، یک‌جا.">
+<meta name="theme-color" content="#7F263D">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%237F263D'/%3E%3Cg fill='%23F3DDE2'%3E%3Cellipse cx='32' cy='17' rx='7' ry='11'/%3E%3Cellipse cx='32' cy='47' rx='7' ry='11'/%3E%3Cellipse cx='17' cy='32' rx='11' ry='7'/%3E%3Cellipse cx='47' cy='32' rx='11' ry='7'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='6' fill='%23F7F4EF'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<a class="skip" href="#main">رفتن به محتوا</a>
+
+<!-- نقش‌های گیاهی (خطی و سبک) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="orn-flower" viewBox="-20 -20 40 40">
+      <g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">
+        <path d="M0 -3 C -7 -9 -6 -17 0 -18 C 6 -17 7 -9 0 -3Z"/>
+        <path d="M0 -3 C -7 -9 -6 -17 0 -18 C 6 -17 7 -9 0 -3Z" transform="rotate(72)"/>
+        <path d="M0 -3 C -7 -9 -6 -17 0 -18 C 6 -17 7 -9 0 -3Z" transform="rotate(144)"/>
+        <path d="M0 -3 C -7 -9 -6 -17 0 -18 C 6 -17 7 -9 0 -3Z" transform="rotate(216)"/>
+        <path d="M0 -3 C -7 -9 -6 -17 0 -18 C 6 -17 7 -9 0 -3Z" transform="rotate(288)"/>
+        <circle r="2.4"/>
+      </g>
+    </symbol>
+    <symbol id="orn-leaf" viewBox="-2 -8 34 16">
+      <path d="M0 0 C 8 -9 22 -9 32 0 C 22 9 8 9 0 0Z M2 0 L 28 0" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="orn-branch" viewBox="0 0 240 150">
+      <g fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+        <path d="M4 146 C 50 130 86 104 118 70 C 142 44 176 28 232 12"/>
+        <path d="M62 126 C 66 108 80 98 96 96"/>
+        <path d="M110 80 C 116 62 132 54 150 54"/>
+        <path d="M150 52 C 160 40 176 38 190 40"/>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round">
+        <path d="M40 136 C 36 120 44 108 56 104 C 60 118 54 130 40 136Z"/>
+        <path d="M80 112 C 90 118 104 116 112 108 C 102 100 88 100 80 112Z"/>
+        <path d="M128 62 C 124 48 132 38 144 34 C 148 48 142 58 128 62Z"/>
+        <path d="M168 40 C 176 48 190 48 198 40 C 190 32 176 32 168 40Z"/>
+        <path d="M206 22 C 212 32 224 34 234 28 C 228 18 214 14 206 22Z"/>
+      </g>
+      <use href="#orn-flower" x="84" y="74" width="30" height="30" color="currentColor"/>
+      <use href="#orn-flower" x="190" y="10" width="26" height="26" color="currentColor"/>
+      <use href="#orn-flower" x="10" y="104" width="22" height="22" color="currentColor"/>
+    </symbol>
+    <symbol id="orn-divider" viewBox="0 0 200 24">
+      <g fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round">
+        <path d="M4 12 H78"/><path d="M122 12 H196"/>
+        <path d="M84 12 C 90 4 96 4 100 12 C 104 20 110 20 116 12"/>
+      </g>
+      <use href="#orn-flower" x="88" y="2" width="24" height="20"/>
+    </symbol>
+  </defs>
+</svg>
+
+<header class="site-header" id="site-header"></header>
+<main id="main" tabindex="-1"><div class="loading-block">در حال بارگذاری…</div></main>
+<footer class="site-footer" id="site-footer"></footer>
+<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+<div id="modal-root"></div>
+
+<noscript><p style="padding:2rem;text-align:center">برای استفاده از این سایت باید جاوااسکریپت فعال باشد.</p></noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"
+        onerror="window.__SB_LOAD_FAILED=true"></script>
+<script src="js/config.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

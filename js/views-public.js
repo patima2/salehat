@@ -1,0 +1,245 @@
+import * as api from './api.js';
+import { esc, $, $$, ICON, KINDS, kindLabel, fmtDate, fmtSize, sanitizeHtml, emptyState, loading, errorBox, toast, withLock, friendlyError, getClientToken, debounce } from './util.js';
+
+const rowHtml = (c) => `
+  <li><a class="row" href="#/content/${c.id}">
+    <span class="t">${esc(c.title)}</span>
+    <span class="m"><span class="chip">${esc(kindLabel(c.kind))}</span>
+      ${(c.category_names || []).slice(0, 3).map((n) => `<span>${esc(n)}</span>`).join('<span aria-hidden="true">·</span>')}
+      ${c.author_name ? `<span aria-hidden="true">·</span><span>${esc(c.author_name)}</span>` : ''}
+    </span>
+    ${c.summary ? `<span class="s">${esc(c.summary)}</span>` : ''}
+  </a></li>`;
+
+const listHtml = (rows) => `<ul class="rows">${rows.map(rowHtml).join('')}</ul>`;
+
+function searchForm(q = '') {
+  return `<form role="search" data-search-form>
+    <label class="hidden" for="q">جست‌وجو</label>
+    <input id="q" type="search" name="q" value="${esc(q)}" placeholder="جست‌وجو در منابع…" enterkeyhint="search" autocomplete="off">
+    <button class="btn" type="submit">جست‌وجو</button>
+  </form>`;
+}
+export function bindSearch(root) {
+  $$('[data-search-form]', root).forEach((f) => f.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = new FormData(f).get('q').toString().trim();
+    location.hash = q ? '#/search?q=' + encodeURIComponent(q) : '#/search';
+  }));
+}
+
+// ---------- صفحهٔ اصلی ----------
+export async function home(el) {
+  el.innerHTML = `
+  <section class="hero">
+    ${ICON.branch('orn-a')}${ICON.branch('orn-b')}
+    <div class="wrap">
+      <h1>بانک محتوای تربیتی صالحات</h1>
+      <p class="lead">منابع و طرح درس‌های موردنیاز مربیان، یک‌جا.</p>
+      ${ICON.divider('orn-divider')}
+    </div>
+  </section>
+  <div class="searchbox">${searchForm()}</div>
+  <div class="wrap">
+    <div class="portals">
+      <a class="portal one" href="#/library">${ICON.branch('orn-c')}<h2>کتابخانهٔ مربیان</h2><p>کتاب‌ها، فایل‌های آموزشی، صوت‌ها و لینک‌های معتبر.</p></a>
+      <a class="portal two" href="#/topics">${ICON.branch('orn-c')}<h2>موضوعات و طرح درس‌ها</h2><p>دسته‌بندی موضوعی و طرح درس‌های آماده.</p></a>
+    </div>
+    <div class="section-head"><h2>تازه‌ها</h2><a href="#/library">همهٔ منابع</a></div>
+    <div id="recent">${loading()}</div>
+    <div class="section-head"><h2>دسته‌بندی‌ها</h2><a href="#/topics">همه</a></div>
+    <div id="cats">${loading()}</div>
+  </div>`;
+  bindSearch(el);
+  try {
+    const rows = await api.searchContents({ limit: 8 });
+    $('#recent', el).innerHTML = rows.length
+      ? listHtml(rows)
+      : emptyState('هنوز محتوایی اضافه نشده است', 'به‌زودی منابع و طرح درس‌ها در این‌جا قرار می‌گیرند. از شکیبایی شما سپاسگزاریم.');
+  } catch (e) { $('#recent', el).innerHTML = errorBox(friendlyError(e)); }
+  try {
+    const { roots } = api.buildTree(await api.fetchCategories());
+    $('#cats', el).innerHTML = roots.length
+      ? `<div class="filters">${roots.map((c) => `<a href="#/category/${c.id}">${esc(c.name)}</a>`).join('')}</div>`
+      : `<p class="muted">دسته‌بندی‌ای تعریف نشده است.</p>`;
+  } catch (e) { $('#cats', el).innerHTML = errorBox(friendlyError(e)); }
+}
+
+// ---------- فهرست صفحه‌بندی‌شده ----------
+async function pagedList(box, params, emptyHtml) {
+  const PAGE = 20;
+  let offset = 0;
+  box.innerHTML = loading();
+  const load = async (append) => {
+    try {
+      const rows = await api.searchContents({ ...params, limit: PAGE, offset });
+      if (!append && !rows.length) { box.innerHTML = emptyHtml; return; }
+      if (!append) box.innerHTML = '<ul class="rows"></ul><div class="btn-row" style="justify-content:center;margin-top:1rem" id="more-row"></div>';
+      $('ul.rows', box).insertAdjacentHTML('beforeend', rows.map(rowHtml).join(''));
+      offset += rows.length;
+      const mr = $('#more-row', box);
+      mr.innerHTML = rows.length === PAGE ? '<button class="btn ghost" type="button">نمایش بیشتر</button>' : '';
+      const b = mr.querySelector('button');
+      if (b) b.onclick = () => withLock(b, () => load(true));
+    } catch (e) {
+      box.innerHTML = errorBox(friendlyError(e));
+      $('[data-retry]', box)?.addEventListener('click', () => pagedList(box, params, emptyHtml));
+    }
+  };
+  await load(false);
+}
+
+// ---------- کتابخانهٔ مربیان ----------
+export async function library(el, { query }) {
+  const kind = query.get('kind') || '';
+  const kinds = kind ? [kind] : ['article', 'book', 'audio', 'file', 'link'];
+  const chips = [['', 'همه'], ['book', 'کتاب'], ['audio', 'صوت'], ['file', 'فایل آموزشی'], ['link', 'لینک'], ['article', 'مطلب']];
+  el.innerHTML = `<div class="wrap">
+    <div class="page-head"><h1>کتابخانهٔ مربیان</h1><p class="muted">کتاب‌ها، صوت‌ها، فایل‌های آموزشی و لینک‌ها</p></div>
+    <nav class="filters" aria-label="نوع محتوا">${chips.map(([k, n]) => `<a href="#/library${k ? '?kind=' + k : ''}" ${k === kind ? 'aria-current="true"' : ''}>${n}</a>`).join('')}</nav>
+    <div id="list"></div></div>`;
+  await pagedList($('#list', el), { kinds }, emptyState('هنوز منبعی در این بخش نیست', 'وقتی منبعی منتشر شود، این‌جا نمایش داده می‌شود.'));
+}
+
+// ---------- موضوعات و طرح درس‌ها ----------
+export async function topics(el) {
+  el.innerHTML = `<div class="wrap"><div class="page-head"><h1>موضوعات و طرح درس‌ها</h1><p class="muted">یک موضوع را انتخاب کنید.</p></div>
+    <div id="cats">${loading()}</div>
+    <div class="section-head"><h2>جدیدترین طرح درس‌ها</h2></div><div id="plans"></div></div>`;
+  try {
+    const { roots } = api.buildTree(await api.fetchCategories());
+    $('#cats', el).innerHTML = roots.length ? `<div class="cat-list">${roots.map((c) => `
+      <div class="cat"><a class="name" href="#/category/${c.id}">${ICON.flower}${esc(c.name)}</a>
+        ${c.children.length ? `<div class="subs">${c.children.map((s) => `<a class="chip" href="#/category/${s.id}">${esc(s.name)}</a>`).join('')}</div>` : ''}
+      </div>`).join('')}</div>` : emptyState('دسته‌بندی‌ای وجود ندارد', 'مدیر سایت می‌تواند دسته‌بندی‌ها را اضافه کند.');
+  } catch (e) { $('#cats', el).innerHTML = errorBox(friendlyError(e)); }
+  await pagedList($('#plans', el), { kinds: ['lesson_plan'] }, emptyState('هنوز طرح درسی منتشر نشده است', 'طرح درس‌های جدید این‌جا نمایش داده می‌شوند.'));
+}
+
+export async function category(el, { params }) {
+  el.innerHTML = `<div class="wrap">${loading()}</div>`;
+  let cats;
+  try { cats = await api.fetchCategories(); } catch (e) { el.innerHTML = `<div class="wrap">${errorBox(friendlyError(e))}</div>`; return; }
+  const { by } = api.buildTree(cats);
+  const cat = by.get(params[0]);
+  if (!cat || !cat.is_active) { el.innerHTML = `<div class="wrap">${emptyState('این دسته پیدا نشد', 'ممکن است حذف یا غیرفعال شده باشد.', '<a class="btn" href="#/topics">بازگشت به موضوعات</a>')}</div>`; return; }
+  const path = api.categoryPath(by, cat.id);
+  el.innerHTML = `<div class="wrap">
+    <div class="page-head">
+      <div class="crumbs"><a href="#/topics">موضوعات</a>${path.map((p) => `<span class="sep">‹</span>${p.id === cat.id ? esc(p.name) : `<a href="#/category/${p.id}">${esc(p.name)}</a>`}`).join('')}</div>
+      <h1>${esc(cat.name)}</h1>
+    </div>
+    ${cat.children.filter((c) => c.is_active).length ? `<div class="filters">${cat.children.filter((c) => c.is_active).map((c) => `<a href="#/category/${c.id}">${esc(c.name)}</a>`).join('')}</div>` : ''}
+    <div id="list"></div></div>`;
+  await pagedList($('#list', el), { category: cat.id }, emptyState('هنوز محتوایی در این دسته نیست', 'محتوای تازه پس از انتشار در این‌جا نمایش داده می‌شود.'));
+}
+
+// ---------- جست‌وجو ----------
+export async function search(el, { query }) {
+  const q = (query.get('q') || '').trim();
+  const kind = query.get('kind') || '';
+  const cat = query.get('cat') || '';
+  let cats = [];
+  try { cats = api.flattenTree(api.buildTree(await api.fetchCategories()).roots); } catch { /* فیلتر دسته اختیاری است */ }
+  el.innerHTML = `<div class="wrap">
+    <div class="page-head"><h1>جست‌وجو</h1></div>
+    <form class="panel" id="sf" role="search">
+      <div class="field"><label for="q">عبارت</label><input id="q" type="search" name="q" value="${esc(q)}" placeholder="عنوان، متن، نویسنده، نام کتاب یا فایل…" autocomplete="off"></div>
+      <div class="inline-form">
+        <div class="field"><label for="k">نوع محتوا</label><select id="k" name="kind"><option value="">همه</option>${Object.entries(KINDS).map(([k, n]) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+        <div class="field"><label for="c">دسته‌بندی</label><select id="c" name="cat"><option value="">همه</option>${cats.map((c) => `<option value="${c.id}" ${c.id === cat ? 'selected' : ''}>${'— '.repeat(c.lvl)}${esc(c.name)}</option>`).join('')}</select></div>
+        <button class="btn" type="submit">جست‌وجو</button>
+      </div>
+    </form>
+    <div id="list"></div></div>`;
+  $('#sf', el).addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const p = new URLSearchParams();
+    for (const k of ['q', 'kind', 'cat']) { const v = (fd.get(k) || '').toString().trim(); if (v) p.set(k, v); }
+    location.hash = '#/search' + (p.toString() ? '?' + p : '');
+  });
+  await pagedList($('#list', el), { q, kinds: kind ? [kind] : null, category: cat || null },
+    emptyState('نتیجه‌ای پیدا نشد', 'عبارت دیگری را امتحان کنید یا فیلترها را کم کنید.'));
+}
+
+// ---------- صفحهٔ محتوا ----------
+const isImg = (m) => m.startsWith('image/');
+const isAudio = (m) => m.startsWith('audio/');
+const isVideo = (m) => m.startsWith('video/');
+
+export async function contentPage(el, { params }) {
+  el.innerHTML = `<div class="wrap narrow">${loading()}</div>`;
+  let c, cats;
+  try { [c, cats] = await Promise.all([api.fetchContent(params[0]), api.fetchCategories().catch(() => [])]); }
+  catch (e) { el.innerHTML = `<div class="wrap narrow">${errorBox(friendlyError(e))}</div>`; $('[data-retry]', el)?.addEventListener('click', () => contentPage(el, { params })); return; }
+  if (!c) { el.innerHTML = `<div class="wrap narrow">${emptyState('این محتوا پیدا نشد', 'ممکن است حذف شده یا هنوز منتشر نشده باشد.', '<a class="btn" href="#/">صفحهٔ اصلی</a>')}</div>`; return; }
+
+  const { by } = api.buildTree(cats);
+  const paths = c.category_ids.map((id) => api.categoryPath(by, id)).filter((p) => p.length);
+  const files = c.files.map((x) => ({ ...x.files, description: x.description, cfId: x.id })).filter((f) => f.id);
+  const [viewUrls, dlUrls, related] = await Promise.all([
+    api.signedUrls(files), api.signedUrls(files, { download: true }), api.fetchRelated(c).catch(() => [])
+  ]);
+  const body = sanitizeHtml(c.body);
+  const mine = api.state.session && (c.created_by === api.state.session.user.id || api.isAdmin());
+
+  el.innerHTML = `<div class="wrap narrow" style="padding-top:1.5rem">
+    <article class="article">
+      <svg class="orn-corner" aria-hidden="true" viewBox="0 0 240 150"><use href="#orn-branch"/></svg>
+      <div class="crumbs"><a href="#/">خانه</a><span class="sep">‹</span><a href="#/library">کتابخانه</a></div>
+      <h1>${esc(c.title)}</h1>
+      <div class="meta"><span class="chip">${esc(kindLabel(c.kind))}</span>
+        ${c.status === 'draft' ? '<span class="chip draft">پیش‌نویس</span>' : ''}
+        ${c.author_name ? `<span>نویسنده/تهیه‌کننده: ${esc(c.author_name)}</span>` : ''}
+        ${c.source_title ? `<span>منبع: ${esc(c.source_title)}</span>` : ''}
+        <span>تاریخ: ${fmtDate(c.created_at)}</span>
+        ${c.updated_at && c.updated_at.slice(0, 10) !== c.created_at.slice(0, 10) ? `<span>آخرین ویرایش: ${fmtDate(c.updated_at)}</span>` : ''}
+      </div>
+      ${paths.length ? `<div class="cat-paths">${paths.map((p) => `<a class="chip" href="#/category/${p[p.length - 1].id}">${p.map((x) => esc(x.name)).join(' ‹ ')}</a>`).join('')}</div>` : ''}
+      ${mine ? `<div class="btn-row" style="margin-bottom:1rem"><a class="btn sm ghost" href="#/edit/${c.id}">ویرایش</a></div>` : ''}
+      ${c.summary ? `<p class="lead-summary">${esc(c.summary)}</p>` : ''}
+      ${body ? `<div class="prose">${body}</div>` : ''}
+      ${files.length ? `<h2 style="margin-top:1.6rem">فایل‌ها</h2><div class="attach">${files.map((f) => attachHtml(f, viewUrls[f.id], dlUrls[f.id])).join('')}</div>` : ''}
+      ${c.links.length ? `<h2 style="margin-top:1.6rem">لینک‌ها</h2><ul class="linklist">${c.links.map((l) => `<li><a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer nofollow">${esc(l.title || l.url)}</a>${l.description ? `<div class="muted small">${esc(l.description)}</div>` : ''}</li>`).join('')}</ul>` : ''}
+      ${related.length ? `<h2 style="margin-top:1.6rem">محتواهای مرتبط</h2>${listHtml(related.map((r) => ({ ...r, category_names: [] })))}` : ''}
+      <section class="fb" id="fb" aria-labelledby="fbt"></section>
+    </article></div>`;
+  if (c.status === 'published') renderFeedback($('#fb', el), c.id); else $('#fb', el).remove();
+}
+
+function attachHtml(f, view, dl) {
+  const m = f.mime_type || '';
+  let preview = '';
+  if (view) {
+    if (isImg(m)) preview = `<img src="${esc(view)}" alt="${esc(f.description || f.file_name)}" loading="lazy">`;
+    else if (isAudio(m)) preview = `<audio controls preload="none" src="${esc(view)}">مرورگر شما پخش صوت را پشتیبانی نمی‌کند.</audio>`;
+    else if (isVideo(m)) preview = `<video controls preload="metadata" playsinline src="${esc(view)}">مرورگر شما پخش ویدئو را پشتیبانی نمی‌کند.</video>`;
+    else if (m === 'application/pdf') preview = `<details style="margin-top:.5rem"><summary class="small" style="cursor:pointer;color:var(--wine)">پیش‌نمایش PDF</summary><iframe src="${esc(view)}" title="${esc(f.file_name)}"></iframe><p class="hint">اگر پیش‌نمایش در گوشی نمایش داده نشد، فایل را دانلود کنید.</p></details>`;
+  }
+  return `<div class="att"><div class="top"><span class="name"><bdi>${esc(f.file_name)}</bdi> <span class="muted small">(${fmtSize(f.size_bytes)})</span></span>
+    ${dl ? `<a class="btn sm soft" href="${esc(dl)}" download="${esc(f.file_name)}">دانلود</a>` : '<span class="muted small">فایل در دسترس نیست</span>'}</div>
+    ${f.description ? `<p class="d">${esc(f.description)}</p>` : ''}${preview}</div>`;
+}
+
+function renderFeedback(box, contentId) {
+  let rating = 0;
+  box.innerHTML = `<h3 id="fbt">نظر شما دربارهٔ این محتوا</h3>
+    <p class="hint">امتیاز و بازخورد شما خصوصی است، نمایش عمومی ندارد و فقط مدیر سایت آن را می‌بیند. نام یا اطلاعات هویتی دریافت نمی‌شود.</p>
+    <div class="stars" role="radiogroup" aria-label="امتیاز">${[1, 2, 3, 4, 5].map((n) => `<button type="button" role="radio" aria-checked="false" aria-label="${n} از ۵" data-n="${n}">★</button>`).join('')}</div>
+    <div class="field"><label for="fbc">بازخورد (اختیاری)</label><textarea id="fbc" maxlength="1000" rows="3"></textarea></div>
+    <div class="hp" aria-hidden="true"><input type="text" id="fbh" tabindex="-1" autocomplete="off"></div>
+    <button class="btn" type="button" id="fbs">ثبت</button>`;
+  const stars = $$('.stars button', box);
+  const paint = () => stars.forEach((b) => { const on = Number(b.dataset.n) <= rating; b.classList.toggle('on', on); b.setAttribute('aria-checked', Number(b.dataset.n) === rating ? 'true' : 'false'); });
+  stars.forEach((b) => b.addEventListener('click', () => { rating = Number(b.dataset.n); paint(); }));
+  const send = $('#fbs', box);
+  send.addEventListener('click', () => withLock(send, async () => {
+    if ($('#fbh', box).value) return; // ربات
+    if (!rating) { toast('ابتدا امتیاز را انتخاب کنید.', 'error'); return; }
+    try {
+      await api.submitFeedback(contentId, rating, $('#fbc', box).value.trim(), getClientToken());
+      box.innerHTML = '<div class="notice ok" style="margin:0">سپاسگزاریم؛ بازخورد شما ثبت شد.</div>';
+    } catch (e) { toast(friendlyError(e), 'error'); }
+  }));
+}
