@@ -256,3 +256,22 @@ a.chip:hover { background: var(--blush-deep); }
 @media print { .site-header, .site-footer, .btn, .fb, .nav-toggle { display: none !important; } body { background: #fff; } }
 
 @media (min-width: 900px) { .brand br { display: none; } .brand { white-space: nowrap; } }
+
+/* ---------- صفحهٔ دسته: زیرشاخه‌های بزرگ‌تر، دکمه‌های کوچک‌تر، حذف ---------- */
+.cat-actions { margin: 0 0 1rem; gap: .4rem; }
+.cat-actions .btn { min-height: 34px; font-size: .85rem; padding: .1rem .8rem; font-weight: 500; }
+.sub-title { font-size: 1.05rem; color: var(--muted); font-weight: 700; margin: .2rem 0 .6rem; }
+.subcards { display: grid; gap: .8rem; grid-template-columns: 1fr; margin: 0 0 1.6rem; }
+@media (min-width: 560px) { .subcards { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .subcards { grid-template-columns: repeat(3, 1fr); } }
+.subcard { position: relative; background: #fff; border: 1.5px solid var(--blush-deep); border-radius: 24px 8px 24px 8px; overflow: hidden; transition: box-shadow .15s, border-color .15s; }
+.subcard:hover { border-color: var(--wine-soft); box-shadow: var(--shadow); }
+.subcard a.name { display: flex; align-items: center; gap: .8rem; min-height: 88px; padding: 1rem 1.2rem; text-decoration: none; color: var(--wine-deep); font-size: 1.2rem; font-weight: 800; line-height: 1.6; }
+.subcard a.name.has-del { padding-left: 3.6rem; }
+.subcard a.name svg { width: 32px; height: 32px; flex: none; color: var(--wine-soft); }
+.mini-del { background: none; border: 0; color: var(--danger); font: inherit; font-size: .82rem; cursor: pointer; padding: .3rem .6rem; min-height: 36px; border-radius: 10px; opacity: .85; }
+.mini-del:hover { background: #FDECEA; opacity: 1; }
+.subcard .mini-del { position: absolute; top: .35rem; left: .35rem; }
+.rows > li.has-del { display: flex; align-items: center; }
+.rows > li.has-del > a.row { flex: 1; min-width: 0; }
+.rows > li.has-del > .mini-del { flex: none; margin: 0 .3rem; }

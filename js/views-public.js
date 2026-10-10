@@ -1,6 +1,6 @@
 import * as api from './api.js';
 import { editor } from './views-editor.js';
-import { esc, $, $$, ICON, KINDS, kindLabel, fmtDate, fmtSize, sanitizeHtml, emptyState, loading, errorBox, toast, withLock, friendlyError, getClientToken, debounce } from './util.js';
+import { esc, $, $$, ICON, KINDS, kindLabel, fmtDate, fmtSize, sanitizeHtml, emptyState, loading, errorBox, toast, withLock, friendlyError, getClientToken, debounce, confirmDialog } from './util.js';
 
 const rowHtml = (c) => `
   <li><a class="row" href="#/content/${c.id}">
@@ -67,7 +67,7 @@ export async function home(el) {
 }
 
 // ---------- فهرست صفحه‌بندی‌شده ----------
-async function pagedList(box, params, emptyHtml) {
+async function pagedList(box, params, emptyHtml, decorate = null) {
   const PAGE = 20;
   let offset = 0;
   box.innerHTML = loading();
@@ -78,13 +78,14 @@ async function pagedList(box, params, emptyHtml) {
       if (!append) box.innerHTML = '<ul class="rows"></ul><div class="btn-row" style="justify-content:center;margin-top:1rem" id="more-row"></div>';
       $('ul.rows', box).insertAdjacentHTML('beforeend', rows.map(rowHtml).join(''));
       offset += rows.length;
+      if (decorate) { try { await decorate(rows, box); } catch { /* دکمهٔ حذف اختیاری است */ } }
       const mr = $('#more-row', box);
       mr.innerHTML = rows.length === PAGE ? '<button class="btn ghost" type="button">نمایش بیشتر</button>' : '';
       const b = mr.querySelector('button');
       if (b) b.onclick = () => withLock(b, () => load(true));
     } catch (e) {
       box.innerHTML = errorBox(friendlyError(e));
-      $('[data-retry]', box)?.addEventListener('click', () => pagedList(box, params, emptyHtml));
+      $('[data-retry]', box)?.addEventListener('click', () => pagedList(box, params, emptyHtml, decorate));
     }
   };
   await load(false);
@@ -125,13 +126,15 @@ export async function category(el, { params }) {
   const cat = by.get(params[0]);
   if (!cat || !cat.is_active) { el.innerHTML = `<div class="wrap">${emptyState('این دسته پیدا نشد', 'ممکن است حذف یا غیرفعال شده باشد.', '<a class="btn" href="#/topics">بازگشت به موضوعات</a>')}</div>`; return; }
   const path = api.categoryPath(by, cat.id);
+  // حذف زیرشاخه: مدیر همه؛ مربی فقط زیرشاخه‌ای که خودش ساخته (دیتابیس هم همین را اعمال می‌کند)
+  const canDeleteCat = (c) => api.canEdit() && (api.isAdmin() || (c.created_by && c.created_by === api.state.session.user.id));
   el.innerHTML = `<div class="wrap">
     <div class="page-head">
       <div class="crumbs"><a href="#/topics">موضوعات</a>${path.map((p) => `<span class="sep">‹</span>${p.id === cat.id ? esc(p.name) : `<a href="#/category/${p.id}">${esc(p.name)}</a>`}`).join('')}</div>
       <h1>${esc(cat.name)}</h1>
     </div>
-    ${cat.children.filter((c) => c.is_active).length ? `<div class="filters">${cat.children.filter((c) => c.is_active).map((c) => `<a href="#/category/${c.id}">${esc(c.name)}</a>`).join('')}</div>` : ''}
-    ${api.canEdit() ? `<div class="btn-row" id="cat-actions" style="margin-bottom:1rem"><button class="btn" type="button" id="add-content">افزودن محتوا</button><button class="btn soft" type="button" id="add-sub">افزودن زیرشاخه</button></div>` : ''}
+    ${cat.children.filter((c) => c.is_active).length ? `<h2 class="sub-title">زیرشاخه‌ها</h2><div class="subcards">${cat.children.filter((c) => c.is_active).map((c) => `<div class="subcard"><a class="name ${canDeleteCat(c) ? 'has-del' : ''}" href="#/category/${c.id}">${ICON.flower}<span>${esc(c.name)}</span></a>${canDeleteCat(c) ? `<button class="mini-del" type="button" data-delcat="${c.id}" aria-label="حذف زیرشاخهٔ ${esc(c.name)}">حذف</button>` : ''}</div>`).join('')}</div>` : ''}
+    ${api.canEdit() ? `<div class="btn-row cat-actions" id="cat-actions"><button class="btn sm ghost" type="button" id="add-content">+ افزودن محتوا</button><button class="btn sm ghost" type="button" id="add-sub">+ افزودن زیرشاخه</button></div>` : ''}
     <div id="inline"></div>
     <div id="list"></div></div>`;
   const reload = () => category(el, { params });
@@ -168,7 +171,46 @@ export async function category(el, { params }) {
       });
     });
   }
-  await pagedList($('#list', el), { category: cat.id }, emptyState('هنوز محتوایی در این دسته نیست', 'محتوای تازه پس از انتشار در این‌جا نمایش داده می‌شود.'));
+  // --- حذف زیرشاخه ---
+  $$('[data-delcat]', el).forEach((b) => b.addEventListener('click', async () => {
+    const c = by.get(b.dataset.delcat);
+    try {
+      let body;
+      if (api.isAdmin()) {
+        const { data, error } = await api.sb.rpc('category_delete_preview', { p_category: c.id }); if (error) throw error;
+        const pv = data[0];
+        if (pv.children_count) { toast('این زیرشاخه خودش زیرشاخه دارد. ابتدا زیرشاخه‌های داخل آن را حذف کنید.', 'error'); return; }
+        body = `<p>زیرشاخهٔ «${esc(c.name)}» حذف می‌شود. این کار قابل بازگشت نیست.</p>` + (pv.orphan_count
+          ? `<div class="notice warn"><b>${pv.orphan_count.toLocaleString('fa-IR')} محتوا</b> فقط در همین زیرشاخه بوده‌اند و به سطل زباله منتقل می‌شوند (قابل بازیابی). محتواهایی که در دسته‌های دیگر هم هستند فقط از این زیرشاخه جدا می‌شوند.</div>`
+          : '<p class="muted">هیچ محتوایی بدون دسته نمی‌ماند.</p>');
+      } else {
+        body = `<p>زیرشاخهٔ «${esc(c.name)}» که خودتان ساخته‌اید حذف می‌شود. این کار قابل بازگشت نیست. فقط زیرشاخهٔ خالی (بدون محتوا و بدون زیرشاخه) قابل حذف است.</p>`;
+      }
+      if (!(await confirmDialog({ title: 'حذف زیرشاخه', text: body, okText: 'حذف زیرشاخه', danger: true }))) return;
+      const r = await api.sb.rpc('delete_category', { p_category: c.id }); if (r.error) throw r.error;
+      toast('زیرشاخه حذف شد.' + (r.data ? ` ${r.data.toLocaleString('fa-IR')} محتوا به سطل زباله رفت.` : ''), 'ok'); reload();
+    } catch (e) { toast(friendlyError(e), 'error'); }
+  }));
+
+  // --- حذف محتوا (کنار هر محتوا): مدیر همه؛ مربی فقط محتوای خودش ---
+  const decorate = async (rows, box) => {
+    if (!api.canEdit()) return;
+    const ids = rows.map((r) => r.id);
+    const { data } = await api.sb.from('contents').select('id,created_by').in('id', ids);
+    const mine = new Set((data || []).filter((r) => api.isAdmin() || r.created_by === api.state.session.user.id).map((r) => r.id));
+    $$('li', box).forEach((li) => {
+      const id = /content\/([\w-]+)/.exec(li.querySelector('a.row')?.getAttribute('href') || '')?.[1];
+      if (!id || !mine.has(id) || li.querySelector('.row-del')) return;
+      li.classList.add('has-del');
+      li.insertAdjacentHTML('beforeend', `<button class="mini-del row-del" type="button" data-delcontent="${id}" data-title="${esc(li.querySelector('.t')?.textContent || '')}">حذف</button>`);
+    });
+  };
+  $('#list', el).addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-delcontent]'); if (!b) return;
+    if (!(await confirmDialog({ title: 'حذف محتوا', text: `<p>«${esc(b.dataset.title)}» به سطل زباله منتقل می‌شود و دیگر در سایت نمایش داده نمی‌شود. مدیر می‌تواند آن را بازیابی کند.</p>`, okText: 'انتقال به سطل زباله', danger: true }))) return;
+    try { await api.softDelete(b.dataset.delcontent); toast('محتوا به سطل زباله منتقل شد.', 'ok'); reload(); } catch (err) { toast(friendlyError(err), 'error'); }
+  });
+  await pagedList($('#list', el), { category: cat.id }, emptyState('هنوز محتوایی در این دسته نیست', 'محتوای تازه پس از انتشار در این‌جا نمایش داده می‌شود.'), decorate);
 }
 
 // ---------- جست‌وجو ----------
