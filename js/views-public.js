@@ -36,6 +36,7 @@ export async function home(el) {
     ${ICON.branch('orn-a')}${ICON.branch('orn-b')}
     <div class="wrap">
       <h1>بانک محتوای تربیتی صالحات</h1>
+      <img class="hero-logo" src="assets/logo-salehat.png" alt="لوگوی صالحات" width="640" height="640">
       <p class="lead">منابع و طرح درس‌های موردنیاز مربیان، یک‌جا.</p>
       ${ICON.divider('orn-divider')}
     </div>
@@ -43,17 +44,17 @@ export async function home(el) {
   <div class="searchbox">${searchForm()}</div>
   <div class="wrap">
     <div class="portals">
-      <a class="portal one" href="#/library">${ICON.branch('orn-c')}<h2>کتابخانهٔ مربیان</h2><p>کتاب‌ها، فایل‌های آموزشی، صوت‌ها و لینک‌های معتبر.</p></a>
+      <a class="portal one" href="#/library">${ICON.branch('orn-c')}<h2>کتابخانهٔ مربیان</h2><p>کتاب‌ها و منابع کتابخانه‌ای.</p></a>
       <a class="portal two" href="#/topics">${ICON.branch('orn-c')}<h2>موضوعات و طرح درس‌ها</h2><p>دسته‌بندی موضوعی و طرح درس‌های آماده.</p></a>
     </div>
-    <div class="section-head"><h2>تازه‌ها</h2><a href="#/library">همهٔ منابع</a></div>
+    <div class="section-head"><h2>تازه‌ها</h2><a href="#/topics">همهٔ موضوعات</a></div>
     <div id="recent">${loading()}</div>
     <div class="section-head"><h2>دسته‌بندی‌ها</h2><a href="#/topics">همه</a></div>
     <div id="cats">${loading()}</div>
   </div>`;
   bindSearch(el);
   try {
-    const rows = await api.searchContents({ limit: 8 });
+    const rows = await api.searchContents({ limit: 8, library: false });
     $('#recent', el).innerHTML = rows.length
       ? listHtml(rows)
       : emptyState('هنوز محتوایی اضافه نشده است', 'به‌زودی منابع و طرح درس‌ها در این‌جا قرار می‌گیرند. از شکیبایی شما سپاسگزاریم.');
@@ -91,16 +92,30 @@ async function pagedList(box, params, emptyHtml, decorate = null) {
   await load(false);
 }
 
-// ---------- کتابخانهٔ مربیان ----------
-export async function library(el, { query }) {
-  const kind = query.get('kind') || '';
-  const kinds = kind ? [kind] : ['article', 'book', 'audio', 'file', 'link'];
-  const chips = [['', 'همه'], ['book', 'کتاب'], ['audio', 'صوت'], ['file', 'فایل آموزشی'], ['link', 'لینک'], ['article', 'مطلب']];
+// ---------- کتابخانهٔ مربیان (فقط کتاب‌هایی که با «افزودن کتاب» ثبت شده‌اند) ----------
+export async function library(el) {
   el.innerHTML = `<div class="wrap">
-    <div class="page-head"><h1>کتابخانهٔ مربیان</h1><p class="muted">کتاب‌ها، صوت‌ها، فایل‌های آموزشی و لینک‌ها</p></div>
-    <nav class="filters" aria-label="نوع محتوا">${chips.map(([k, n]) => `<a href="#/library${k ? '?kind=' + k : ''}" ${k === kind ? 'aria-current="true"' : ''}>${n}</a>`).join('')}</nav>
+    <div class="page-head"><h1>کتابخانهٔ مربیان</h1><p class="muted">کتاب‌ها و منابع کتابخانه‌ای</p>
+    ${api.canEdit() ? '<a class="btn sm ghost" href="#/library/new">+ افزودن کتاب</a>' : ''}</div>
     <div id="list"></div></div>`;
-  await pagedList($('#list', el), { kinds }, emptyState('هنوز منبعی در این بخش نیست', 'وقتی منبعی منتشر شود، این‌جا نمایش داده می‌شود.'));
+  // مدیر همه‌ی کتاب‌ها را می‌تواند مدیریت کند؛ مربی فقط کتاب‌های خودش (دیتابیس هم همین را اعمال می‌کند)
+  const decorate = async (rows, box) => {
+    if (!api.canEdit()) return;
+    const { data } = await api.sb.from('contents').select('id,created_by').in('id', rows.map((r) => r.id));
+    const mine = new Set((data || []).filter((r) => api.isAdmin() || r.created_by === api.state.session.user.id).map((r) => r.id));
+    $$('li', box).forEach((li) => {
+      const id = /content\/([\w-]+)/.exec(li.querySelector('a.row')?.getAttribute('href') || '')?.[1];
+      if (!id || !mine.has(id) || li.querySelector('.row-del')) return;
+      li.classList.add('has-del');
+      li.insertAdjacentHTML('beforeend', `<a class="mini-del edit" href="#/edit/${id}">ویرایش</a><button class="mini-del row-del" type="button" data-delcontent="${id}" data-title="${esc(li.querySelector('.t')?.textContent || '')}">حذف</button>`);
+    });
+  };
+  $('#list', el).addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-delcontent]'); if (!b) return;
+    if (!(await confirmDialog({ title: 'حذف کتاب', text: `<p>«${esc(b.dataset.title)}» به سطل زباله منتقل می‌شود و دیگر در کتابخانه نمایش داده نمی‌شود. مدیر می‌تواند آن را بازیابی کند.</p>`, okText: 'انتقال به سطل زباله', danger: true }))) return;
+    try { await api.softDelete(b.dataset.delcontent); toast('کتاب به سطل زباله منتقل شد.', 'ok'); library(el); } catch (err) { toast(friendlyError(err), 'error'); }
+  });
+  await pagedList($('#list', el), { library: true }, emptyState('هنوز کتابی در کتابخانه نیست', 'کتاب‌هایی که با «افزودن کتاب» ثبت شوند این‌جا نمایش داده می‌شوند.'), decorate);
 }
 
 // ---------- موضوعات و طرح درس‌ها ----------
@@ -266,7 +281,7 @@ export async function contentPage(el, { params }) {
   el.innerHTML = `<div class="wrap narrow" style="padding-top:1.5rem">
     <article class="article">
       <svg class="orn-corner" aria-hidden="true" viewBox="0 0 240 150"><use href="#orn-branch"/></svg>
-      <div class="crumbs"><a href="#/">خانه</a><span class="sep">‹</span><a href="#/library">کتابخانه</a></div>
+      <div class="crumbs"><a href="#/">خانه</a><span class="sep">‹</span>${c.in_library ? '<a href="#/library">کتابخانه</a>' : '<a href="#/topics">موضوعات</a>'}</div>
       <h1>${esc(c.title)}</h1>
       <div class="meta"><span class="chip">${esc(kindLabel(c.kind))}</span>
         ${c.status === 'draft' ? '<span class="chip draft">پیش‌نویس</span>' : ''}

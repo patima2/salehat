@@ -37,7 +37,7 @@ let uid = 0;
 const nextKey = () => 'k' + ++uid;
 
 // presetCategory / onSaved / onCancel: برای باز کردن فرم داخل صفحهٔ دسته (اختیاری)
-export async function editor(el, { params = [], presetCategory = null, onSaved = null, onCancel = null }) {
+export async function editor(el, { params = [], presetCategory = null, onSaved = null, onCancel = null, library = false }) {
   if (!needEditor(el)) return;
   const editId = params[0] || null;
   el.innerHTML = `<div class="wrap narrow">${loading()}</div>`;
@@ -52,9 +52,10 @@ export async function editor(el, { params = [], presetCategory = null, onSaved =
     }
   } catch (e) { el.innerHTML = `<div class="wrap narrow">${errorBox(friendlyError(e), false)}<a class="btn" href="#/my">بازگشت</a></div>`; return; }
 
+  const libMode = library || !!existing?.in_library; // حالت «کتاب کتابخانه»
   const flat = api.flattenTree(api.buildTree(cats).roots);
   const st = {
-    kind: existing?.kind || 'article', status: existing?.status || 'published',
+    kind: libMode ? 'book' : (existing?.kind || 'article'), status: existing?.status || 'published',
     cats: new Set(existing?.category_ids || (presetCategory ? [presetCategory] : [])),
     files: (existing?.files || []).filter((f) => f.files).map((f) => ({ key: nextKey(), cfId: f.id, fileId: f.file_id, meta: f.files, description: f.description, pending: null })),
     links: (existing?.links || []).map((l) => ({ key: nextKey(), id: l.id, url: l.url, title: l.title, description: l.description })),
@@ -63,20 +64,20 @@ export async function editor(el, { params = [], presetCategory = null, onSaved =
   const markDirty = () => { st.dirty = true; };
   window.onbeforeunload = () => (st.dirty ? 'تغییرات ذخیره‌نشده از بین می‌رود.' : undefined);
 
-  el.innerHTML = `<div class="wrap narrow"><div class="page-head"><h1>${editId ? 'ویرایش محتوا' : 'محتوای جدید'}</h1></div>
+  el.innerHTML = `<div class="wrap narrow"><div class="page-head"><h1>${libMode ? (editId ? 'ویرایش کتاب' : 'افزودن کتاب') : (editId ? 'ویرایش محتوا' : 'محتوای جدید')}</h1></div>
   <form id="cf" novalidate>
     <div class="panel">
       <div class="field"><label for="f-title">عنوان *</label><input id="f-title" type="text" maxlength="250" value="${esc(existing?.title || '')}"></div>
-      <div class="field"><label for="f-kind">نوع محتوا</label><select id="f-kind">${Object.entries(KINDS).map(([k, n]) => `<option value="${k}" ${k === st.kind ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-      <div class="field"><label for="f-sum">توضیح کوتاه</label><textarea id="f-sum" maxlength="1000" rows="2">${esc(existing?.summary || '')}</textarea></div>
-      <div class="field"><label for="f-author">نویسنده یا تهیه‌کننده</label><input id="f-author" type="text" maxlength="200" value="${esc(existing?.author_name || '')}"></div>
-      <div class="field" style="margin:0"><label for="f-source">عنوان کتاب یا منبع</label><input id="f-source" type="text" maxlength="300" value="${esc(existing?.source_title || '')}"></div>
+      <div class="field ${libMode ? 'hidden' : ''}"><label for="f-kind">نوع محتوا</label><select id="f-kind">${Object.entries(KINDS).map(([k, n]) => `<option value="${k}" ${k === st.kind ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+      <div class="field"><label for="f-sum">${libMode ? 'توضیحات' : 'توضیح کوتاه'}</label><textarea id="f-sum" maxlength="1000" rows="2">${esc(existing?.summary || '')}</textarea></div>
+      <div class="field"><label for="f-author">${libMode ? 'نام نویسنده' : 'نویسنده یا تهیه‌کننده'}</label><input id="f-author" type="text" maxlength="200" value="${esc(existing?.author_name || '')}"></div>
+      <div class="field ${libMode ? 'hidden' : ''}" style="margin:0"><label for="f-source">عنوان کتاب یا منبع</label><input id="f-source" type="text" maxlength="300" value="${esc(existing?.source_title || '')}"></div>
     </div>
-    <div class="panel"><h3>دسته‌بندی‌ها *</h3>
+    <div class="panel ${libMode ? 'hidden' : ''}"><h3>دسته‌بندی‌ها *</h3>
       ${flat.length ? `<div class="cat-pick" id="catpick" role="group" aria-label="دسته‌بندی‌ها">${flat.map((c) => `<label class="check lvl${Math.min(c.lvl, 2)}"><input type="checkbox" value="${c.id}" ${st.cats.has(c.id) ? 'checked' : ''}> ${esc(c.name)}${c.is_active ? '' : ' <span class="chip off">غیرفعال</span>'}</label>`).join('')}</div><div class="hint">می‌توانید چند دسته و زیرمجموعه انتخاب کنید.</div>`
         : '<div class="notice warn">هنوز دسته‌بندی‌ای تعریف نشده است. ابتدا مدیر باید دسته‌بندی بسازد.</div>'}
     </div>
-    <div class="panel"><h3>متن اصلی</h3>
+    <div class="panel ${libMode ? 'hidden' : ''}"><h3>متن اصلی</h3>
       <div class="rte-bar" role="toolbar" aria-label="قالب‌بندی">
         <button type="button" data-cmd="bold" title="پررنگ" aria-label="پررنگ">B</button>
         <button type="button" data-cmd="italic" title="مورب" aria-label="مورب"><i>I</i></button>
@@ -90,7 +91,7 @@ export async function editor(el, { params = [], presetCategory = null, onSaved =
       </div>
       <div id="rte" class="rte" contenteditable="true" dir="rtl" role="textbox" aria-multiline="true" aria-label="متن اصلی">${sanitizeHtml(existing?.body || '')}</div>
     </div>
-    <div class="panel"><h3>فایل‌های پیوست</h3>
+    <div class="panel"><h3>${libMode ? 'فایل کتاب' : 'فایل‌های پیوست'}</h3>
       <div id="files"></div>
       <div class="btn-row"><button class="btn soft" type="button" id="addfile">افزودن فایل</button>
         <input type="file" id="fileinput" multiple hidden></div>
@@ -104,7 +105,7 @@ export async function editor(el, { params = [], presetCategory = null, onSaved =
     </div>
     <div class="sticky-actions"><div id="saveprog"></div><div class="btn-row">
       <button class="btn" type="submit" id="savebtn">ذخیره</button>
-      ${onCancel ? '<button class="btn ghost" type="button" id="cancel">انصراف</button>' : `<a class="btn ghost" href="${editId ? '#/content/' + editId : '#/my'}" id="cancel">انصراف</a>`}</div></div>
+      ${onCancel ? '<button class="btn ghost" type="button" id="cancel">انصراف</button>' : `<a class="btn ghost" href="${editId ? '#/content/' + editId : (libMode ? '#/library' : '#/my')}" id="cancel">انصراف</a>`}</div></div>
   </form></div>`;
 
   const form = $('#cf', el);
@@ -196,7 +197,7 @@ export async function editor(el, { params = [], presetCategory = null, onSaved =
     const body = sanitizeHtml(rte.innerHTML);
     const status = form.status.value;
     if (!title) { toast('عنوان را وارد کنید.', 'error'); $('#f-title', el).focus(); return; }
-    if (!st.cats.size) { toast('دست‌کم یک دسته‌بندی انتخاب کنید.', 'error'); return; }
+    if (!libMode && !st.cats.size) { toast('دست‌کم یک دسته‌بندی انتخاب کنید.', 'error'); return; }
     const badLink = st.links.find((l) => !isHttpUrl(l.url.trim()));
     if (badLink) { toast('نشانی همهٔ لینک‌ها باید با http:// یا https:// شروع شود.', 'error'); return; }
     st.saving = true;
@@ -213,7 +214,7 @@ export async function editor(el, { params = [], presetCategory = null, onSaved =
         prog.innerHTML = '';
         const id = await api.saveContent({
           id: editId, title, kind: st.kind, summary: $('#f-sum', el).value, body, author_name: $('#f-author', el).value,
-          source_title: $('#f-source', el).value, status, category_ids: [...st.cats],
+          source_title: $('#f-source', el).value, status, category_ids: libMode ? [] : [...st.cats], in_library: libMode,
           files: st.files.map((f) => ({ cfId: f.cfId, fileId: f.fileId, description: f.description })),
           links: st.links.map((l) => ({ id: l.id, url: l.url, title: l.title, description: l.description }))
         });

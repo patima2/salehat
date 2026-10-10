@@ -14,6 +14,7 @@ footer.innerHTML = `${ICON.divider()}<div class="wrap">بانک محتوای ت�
 const ROUTES = [
   [/^$|^\/$/, pub.home],
   [/^\/library$/, pub.library],
+  [/^\/library\/new$/, (el, ctx) => ed.editor(el, { ...ctx, library: true })],
   [/^\/topics$/, pub.topics],
   [/^\/category\/([\w-]+)$/, pub.category],
   [/^\/search$/, pub.search],

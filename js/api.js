@@ -112,9 +112,9 @@ export function flattenTree(roots, lvl = 0, out = []) {
 }
 
 // ---------- محتوا ----------
-export async function searchContents({ q = '', kinds = null, category = null, limit = 20, offset = 0 } = {}) {
+export async function searchContents({ q = '', kinds = null, category = null, limit = 20, offset = 0, library = null } = {}) {
   const { data, error } = await sb.rpc('search_contents', {
-    q, p_kinds: kinds, p_category: category, p_limit: limit, p_offset: offset
+    q, p_kinds: kinds, p_category: category, p_limit: limit, p_offset: offset, p_library: library
   });
   if (error) throw error;
   return data;
@@ -196,6 +196,7 @@ export async function saveContent(d) {
     title: d.title.trim(), kind: d.kind, summary: d.summary.trim(), body: d.body,
     author_name: d.author_name.trim(), source_title: d.source_title.trim(), status: d.status
   };
+  if (d.in_library) row.in_library = true; // فقط برای کتاب‌های کتابخانه (محتوای موضوعی این فیلد را دست‌نخورده می‌ماند)
   let id = d.id;
   if (id) {
     const { error } = await sb.from('contents').update(row).eq('id', id);

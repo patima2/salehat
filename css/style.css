@@ -275,3 +275,9 @@ a.chip:hover { background: var(--blush-deep); }
 .rows > li.has-del { display: flex; align-items: center; }
 .rows > li.has-del > a.row { flex: 1; min-width: 0; }
 .rows > li.has-del > .mini-del { flex: none; margin: 0 .3rem; }
+
+/* ---------- لوگوی صالحات در صفحهٔ اصلی ---------- */
+.hero-logo { display: block; width: 220px; max-width: 62vw; height: auto; aspect-ratio: 1; margin: .9rem auto .8rem; border-radius: 50%; background: #FBF6F0; border: 3px solid var(--blush-deep); box-shadow: 0 10px 28px -10px rgba(0,0,0,.35); }
+@media (min-width: 700px) { .hero-logo { width: 280px; margin: 1.1rem auto 1rem; } }
+.mini-del.edit { color: var(--wine); text-decoration: none; display: inline-flex; align-items: center; }
+.mini-del.edit:hover { background: var(--blush); }
