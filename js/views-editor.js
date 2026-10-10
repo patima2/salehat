@@ -36,7 +36,8 @@ export async function myContents(el) {
 let uid = 0;
 const nextKey = () => 'k' + ++uid;
 
-export async function editor(el, { params }) {
+// presetCategory / onSaved / onCancel: برای باز کردن فرم داخل صفحهٔ دسته (اختیاری)
+export async function editor(el, { params = [], presetCategory = null, onSaved = null, onCancel = null }) {
   if (!needEditor(el)) return;
   const editId = params[0] || null;
   el.innerHTML = `<div class="wrap narrow">${loading()}</div>`;
@@ -54,7 +55,7 @@ export async function editor(el, { params }) {
   const flat = api.flattenTree(api.buildTree(cats).roots);
   const st = {
     kind: existing?.kind || 'article', status: existing?.status || 'published',
-    cats: new Set(existing?.category_ids || []),
+    cats: new Set(existing?.category_ids || (presetCategory ? [presetCategory] : [])),
     files: (existing?.files || []).filter((f) => f.files).map((f) => ({ key: nextKey(), cfId: f.id, fileId: f.file_id, meta: f.files, description: f.description, pending: null })),
     links: (existing?.links || []).map((l) => ({ key: nextKey(), id: l.id, url: l.url, title: l.title, description: l.description })),
     dirty: false, saving: false
@@ -92,10 +93,8 @@ export async function editor(el, { params }) {
     <div class="panel"><h3>فایل‌های پیوست</h3>
       <div id="files"></div>
       <div class="btn-row"><button class="btn soft" type="button" id="addfile">افزودن فایل</button>
-        <input type="file" id="fileinput" multiple hidden>
-        <button class="btn soft" type="button" id="recbtn">ضبط صدا</button></div>
+        <input type="file" id="fileinput" multiple hidden></div>
       <div class="hint">PDF، تصویر، صوت، ویدئو، Word، PowerPoint، Excel و متن؛ حداکثر ۵۰ مگابایت برای هر فایل.</div>
-      <div id="recorder" class="recorder hidden"></div>
     </div>
     <div class="panel"><h3>لینک‌های خارجی</h3><div id="links"></div>
       <button class="btn soft" type="button" id="addlink">افزودن لینک</button></div>
@@ -105,14 +104,14 @@ export async function editor(el, { params }) {
     </div>
     <div class="sticky-actions"><div id="saveprog"></div><div class="btn-row">
       <button class="btn" type="submit" id="savebtn">ذخیره</button>
-      <a class="btn ghost" href="${editId ? '#/content/' + editId : '#/my'}" id="cancel">انصراف</a></div></div>
+      ${onCancel ? '<button class="btn ghost" type="button" id="cancel">انصراف</button>' : `<a class="btn ghost" href="${editId ? '#/content/' + editId : '#/my'}" id="cancel">انصراف</a>`}</div></div>
   </form></div>`;
 
   const form = $('#cf', el);
   form.addEventListener('input', markDirty);
   $('#f-kind', el).addEventListener('change', (e) => { st.kind = e.target.value; });
   $('#catpick', el)?.addEventListener('change', (e) => { e.target.checked ? st.cats.add(e.target.value) : st.cats.delete(e.target.value); markDirty(); });
-  $('#cancel', el).addEventListener('click', () => { st.dirty = false; });
+  $('#cancel', el).addEventListener('click', () => { st.dirty = false; window.onbeforeunload = null; onCancel?.(); });
 
   // --- ویرایشگر متن ---
   const rte = $('#rte', el);
@@ -174,8 +173,6 @@ export async function editor(el, { params }) {
   });
   renderFiles();
 
-  // --- ضبط صوت ---
-  setupRecorder($('#recorder', el), $('#recbtn', el), (file) => addFiles([file]));
 
   // --- لینک‌ها ---
   const linksBox = $('#links', el);
@@ -222,64 +219,11 @@ export async function editor(el, { params }) {
         });
         st.dirty = false; window.onbeforeunload = null;
         toast(status === 'draft' ? 'پیش‌نویس ذخیره شد.' : 'محتوا ذخیره و منتشر شد.', 'ok');
-        location.hash = '#/content/' + id;
+        if (onSaved) onSaved(id); else location.hash = '#/content/' + id;
       } catch (err) {
         prog.innerHTML = '';
         toast(friendlyError(err), 'error');
       } finally { st.saving = false; }
     });
-  });
-}
-
-// ---------- ضبط صوت در مرورگر ----------
-function setupRecorder(box, btn, onFile) {
-  let rec = null, stream = null, chunks = [], timer = null, secs = 0, blob = null, mime = '', objUrl = null;
-  const pickMime = () => ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/ogg'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
-  const extFor = (m) => (m.includes('mp4') ? 'm4a' : m.includes('ogg') ? 'ogg' : 'weba');
-  const fmt = (s) => String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
-  const cleanup = () => { stream?.getTracks().forEach((t) => t.stop()); clearInterval(timer); if (objUrl) URL.revokeObjectURL(objUrl); stream = null; objUrl = null; };
-  const msg = (t) => { box.classList.remove('hidden'); box.innerHTML = `<div class="notice warn" style="margin:0">${t}</div>`; };
-
-  const showIdle = () => { box.innerHTML = '<div class="btn-row"><button class="btn" type="button" data-r="start">شروع ضبط</button><button class="btn ghost" type="button" data-r="close">بستن</button></div><p class="hint">با زدن «شروع ضبط»، مرورگر اجازهٔ میکروفون را می‌پرسد.</p>'; };
-  btn.addEventListener('click', () => {
-    if (!box.classList.contains('hidden')) { cleanup(); box.classList.add('hidden'); return; }
-    if (!window.isSecureContext) return msg('ضبط صدا فقط در نشانی امن (https) کار می‌کند. این سایت را از نشانی https باز کنید یا یک فایل صوتی آماده بارگذاری کنید.');
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return msg('این مرورگر ضبط صدا را پشتیبانی نمی‌کند. از مرورگر جدیدتر استفاده کنید یا فایل صوتی آماده بارگذاری کنید.');
-    box.classList.remove('hidden'); showIdle();
-  });
-  box.addEventListener('click', async (e) => {
-    const a = e.target.closest('[data-r]')?.dataset.r; if (!a) return;
-    if (a === 'close') { cleanup(); box.classList.add('hidden'); return; }
-    if (a === 'start') {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      } catch (err) {
-        const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
-        return msg(denied ? 'اجازهٔ میکروفون داده نشد. در تنظیمات مرورگر یا گوشی، دسترسی میکروفون را برای این سایت فعال کنید؛ یا فایل صوتی آماده بارگذاری کنید.'
-          : err && err.name === 'NotFoundError' ? 'میکروفونی پیدا نشد. فایل صوتی آماده بارگذاری کنید.' : 'شروع ضبط ممکن نشد. دوباره تلاش کنید یا فایل صوتی آماده بارگذاری کنید.');
-      }
-      mime = pickMime(); chunks = []; secs = 0; blob = null;
-      try { rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); } catch { cleanup(); return msg('ضبط صدا در این مرورگر شروع نشد.'); }
-      mime = (rec.mimeType || mime || 'audio/webm');
-      rec.ondataavailable = (ev) => { if (ev.data.size) chunks.push(ev.data); };
-      rec.onstop = () => {
-        clearInterval(timer);
-        blob = new Blob(chunks, { type: mime.split(';')[0] });
-        stream?.getTracks().forEach((t) => t.stop());
-        if (!blob.size) return msg('چیزی ضبط نشد. دوباره تلاش کنید.');
-        objUrl = URL.createObjectURL(blob);
-        box.innerHTML = `<p><b>ضبط انجام شد (${fmt(secs)})</b></p><audio controls src="${objUrl}" style="width:100%"></audio>
-          <div class="btn-row" style="margin-top:.6rem"><button class="btn" type="button" data-r="use">افزودن به پیوست‌ها</button><button class="btn ghost" type="button" data-r="again">ضبط دوباره</button><button class="btn ghost" type="button" data-r="close">انصراف</button></div>`;
-      };
-      rec.start(1000);
-      box.innerHTML = `<p><span class="rec-dot"></span><b id="rtime">00:00</b> در حال ضبط…</p><button class="btn danger" type="button" data-r="stop">پایان ضبط</button>`;
-      timer = setInterval(() => { secs++; const t = box.querySelector('#rtime'); if (t) t.textContent = fmt(secs); }, 1000);
-    } else if (a === 'stop') { rec?.state !== 'inactive' && rec.stop(); }
-    else if (a === 'again') { cleanup(); showIdle(); }
-    else if (a === 'use') {
-      const stamp = new Date().toLocaleDateString('fa-IR').replace(/\//g, '-') + '-' + new Date().toTimeString().slice(0, 5).replace(':', '');
-      const file = new File([blob], `ضبط-صوتی-${stamp}.${extFor(mime)}`, { type: mime.split(';')[0] });
-      cleanup(); box.classList.add('hidden'); onFile(file);
-    }
   });
 }

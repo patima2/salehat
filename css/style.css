@@ -219,9 +219,6 @@ a.chip:hover { background: var(--blush-deep); }
 .cat-pick .lvl1 { padding-right: 1.4rem; } .cat-pick .lvl2 { padding-right: 2.8rem; }
 .item-edit { border: 1px solid var(--line); border-radius: var(--r-sm); padding: .8rem; margin-bottom: .7rem; background: var(--cream); }
 .item-edit .top { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; margin-bottom: .5rem; }
-.recorder { border: 1.5px dashed var(--blush-deep); border-radius: var(--r-md); padding: .9rem; background: var(--cream); margin-top: .8rem; }
-.rec-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--danger); margin-left: .4rem; animation: blink 1s infinite; }
-@keyframes blink { 50% { opacity: .2; } }
 .sticky-actions { position: sticky; bottom: 0; background: rgba(247,244,239,.95); padding: .8rem 0; border-top: 1px solid var(--line); z-index: 10; margin-top: 1rem; }
 
 /* ---------- پنل مدیریت ---------- */

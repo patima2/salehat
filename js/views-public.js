@@ -1,4 +1,5 @@
 import * as api from './api.js';
+import { editor } from './views-editor.js';
 import { esc, $, $$, ICON, KINDS, kindLabel, fmtDate, fmtSize, sanitizeHtml, emptyState, loading, errorBox, toast, withLock, friendlyError, getClientToken, debounce } from './util.js';
 
 const rowHtml = (c) => `
@@ -130,7 +131,43 @@ export async function category(el, { params }) {
       <h1>${esc(cat.name)}</h1>
     </div>
     ${cat.children.filter((c) => c.is_active).length ? `<div class="filters">${cat.children.filter((c) => c.is_active).map((c) => `<a href="#/category/${c.id}">${esc(c.name)}</a>`).join('')}</div>` : ''}
+    ${api.canEdit() ? `<div class="btn-row" id="cat-actions" style="margin-bottom:1rem"><button class="btn" type="button" id="add-content">افزودن محتوا</button><button class="btn soft" type="button" id="add-sub">افزودن زیرشاخه</button></div>` : ''}
+    <div id="inline"></div>
     <div id="list"></div></div>`;
+  const reload = () => category(el, { params });
+  if (api.canEdit()) {
+    const inline = $('#inline', el), list = $('#list', el), actions = $('#cat-actions', el);
+    const close = () => { inline.innerHTML = ''; list.classList.remove('hidden'); actions.classList.remove('hidden'); window.onbeforeunload = null; };
+    const open = () => { list.classList.add('hidden'); actions.classList.add('hidden'); };
+    $('#add-content', el).addEventListener('click', async () => {
+      open();
+      await editor(inline, { presetCategory: cat.id, onSaved: () => { toast('محتوا ذخیره شد.', 'ok'); reload(); }, onCancel: close });
+      inline.scrollIntoView({ block: 'start' });
+    });
+    $('#add-sub', el).addEventListener('click', () => {
+      open();
+      inline.innerHTML = `<form class="panel" id="subform" novalidate><h3>افزودن زیرشاخه</h3>
+        <div class="field"><label for="sub-parent">والد</label><input id="sub-parent" type="text" value="${esc(cat.name)}" readonly></div>
+        <div class="field"><label for="sub-name">نام زیرشاخه *</label><input id="sub-name" type="text" maxlength="120" required></div>
+        <div class="btn-row"><button class="btn" type="submit">ایجاد زیرشاخه</button><button class="btn ghost" type="button" id="sub-cancel">انصراف</button></div></form>`;
+      $('#sub-name', el).focus();
+      $('#sub-cancel', el).addEventListener('click', close);
+      $('#subform', el).addEventListener('submit', (e) => {
+        e.preventDefault();
+        const name = $('#sub-name', el).value.trim();
+        if (!name) { toast('نام زیرشاخه را وارد کنید.', 'error'); return; }
+        withLock($('#subform button[type=submit]', el), async () => {
+          try {
+            const sibs = cat.children;
+            const order = sibs.length ? Math.max(...sibs.map((x) => x.sort_order)) + 10 : 10;
+            const { error } = await api.sb.from('categories').insert({ name, parent_id: cat.id, sort_order: order });
+            if (error) throw error;
+            toast('زیرشاخه ایجاد شد.', 'ok'); reload();
+          } catch (err) { toast(friendlyError(err), 'error'); }
+        });
+      });
+    });
+  }
   await pagedList($('#list', el), { category: cat.id }, emptyState('هنوز محتوایی در این دسته نیست', 'محتوای تازه پس از انتشار در این‌جا نمایش داده می‌شود.'));
 }
 
