@@ -126,7 +126,7 @@ export async function fetchContent(id) {
   if (!data) return null;
   const [cc, cf, cl] = await Promise.all([
     sb.from('content_categories').select('category_id').eq('content_id', id),
-    sb.from('content_files').select('id, description, sort_order, file_id, files(id, storage_path, file_name, mime_type, size_bytes)').eq('content_id', id).order('sort_order'),
+    sb.from('content_files').select('*, files(id, storage_path, file_name, mime_type, size_bytes)').eq('content_id', id).order('sort_order'),
     sb.from('content_links').select('*').eq('content_id', id).order('sort_order')
   ]);
   for (const r of [cc, cf, cl]) if (r.error) throw r.error;
@@ -225,10 +225,14 @@ export async function saveContent(d) {
   if (rmIds.length) { const { error } = await sb.from('content_files').delete().in('id', rmIds); if (error) throw error; }
   for (const [i, f] of d.files.entries()) {
     if (f.cfId) {
-      const { error } = await sb.from('content_files').update({ description: f.description.trim(), sort_order: i, file_id: f.fileId }).eq('id', f.cfId);
+      const upd = { description: f.description.trim(), sort_order: i, file_id: f.fileId };
+      if ((f.title || '').trim() || f.hasTitleCol) upd.title = (f.title || '').trim();
+      const { error } = await sb.from('content_files').update(upd).eq('id', f.cfId);
       if (error) throw error;
     } else {
-      const { error } = await sb.from('content_files').insert({ content_id: id, file_id: f.fileId, description: f.description.trim(), sort_order: i });
+      const ins = { content_id: id, file_id: f.fileId, description: f.description.trim(), sort_order: i };
+      if ((f.title || '').trim()) ins.title = f.title.trim();
+      const { error } = await sb.from('content_files').insert(ins);
       if (error) throw error;
     }
   }

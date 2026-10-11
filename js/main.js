@@ -87,6 +87,7 @@ async function route() {
     const m = re.exec(path.replace(/\/+$/, '') || '/');
     const m2 = m || (path === '' ? re.exec('') : null);
     if (!m2) continue;
+    main.classList.remove('page-in'); void main.offsetWidth; main.classList.add('page-in');
     main.innerHTML = loading();
     try {
       await fn(main, { params: m2.slice(1), query: new URLSearchParams(qs) });

@@ -93,29 +93,106 @@ async function pagedList(box, params, emptyHtml, decorate = null) {
 }
 
 // ---------- کتابخانهٔ مربیان (فقط کتاب‌هایی که با «افزودن کتاب» ثبت شده‌اند) ----------
+const COVER_TONES = 5; // زرشکی، صورتی چرک، کرم، یاسی، سبز ملایم (در CSS)
+const coverTone = (id) => { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % COVER_TONES; };
+// قالب یکسان جلد: کتاب ایستاده با شیار عطف، قاب ظریف، گل و پایهٔ باریک (رنگ از CSS می‌آید)
+const coverSvg = (tone) => `<svg class="cover tone-${tone}" viewBox="0 0 84 112" aria-hidden="true" focusable="false">
+  <path class="stand" d="M14 106 H70 M24 106 L30 100 M60 106 L54 100" fill="none" stroke-width="1.6" stroke-linecap="round"/>
+  <rect class="pages" x="9" y="9" width="64" height="90" rx="5"/>
+  <rect class="body" x="6" y="6" width="64" height="90" rx="6"/>
+  <rect class="spine" x="56" y="6" width="14" height="90" rx="6"/>
+  <path class="spine-line" d="M58 10 V92" fill="none" stroke-width="1"/>
+  <rect class="frame" x="12" y="13" width="38" height="76" rx="4" fill="none" stroke-width="1"/>
+  <g class="ornament"><use href="#orn-flower" x="17" y="34" width="28" height="28"/></g>
+  <path class="rule" d="M20 74 H42" fill="none" stroke-width="1.2" stroke-linecap="round"/>
+  <path class="rule" d="M24 79 H38" fill="none" stroke-width="1" stroke-linecap="round"/>
+</svg>`;
+const isPdf = (f) => (f.files?.mime_type || '') === 'application/pdf';
+
+function bookCard(b, canManage) {
+  const files = (b.content_files || []).filter((x) => x.files);
+  const hasPdf = files.some(isPdf);
+  const tone = coverTone(b.id);
+  return `<article class="book" data-id="${b.id}">
+    <button class="book-head" type="button" aria-expanded="false" aria-controls="bd-${b.id}">
+      <span class="cover-wrap">${coverSvg(tone)}</span>
+      <span class="book-info">
+        <span class="book-title">${esc(b.title)}</span>
+        ${b.author_name ? `<span class="book-author">${esc(b.author_name)}</span>` : ''}
+        <span class="book-badges">${hasPdf ? '<span class="badge-pdf">PDF</span>' : ''}${files.length && !hasPdf ? '<span class="badge-pdf alt">فایل</span>' : ''}</span>
+      </span>
+      <span class="chev" aria-hidden="true"></span>
+    </button>
+    <div class="book-details" id="bd-${b.id}" role="region"><div class="inner"><div class="pad">
+      ${b.summary ? `<p class="book-desc">${esc(b.summary)}</p>` : '<p class="muted small">توضیحاتی ثبت نشده است.</p>'}
+      <dl class="specs">
+        ${b.author_name ? `<div><dt>نویسنده</dt><dd>${esc(b.author_name)}</dd></div>` : ''}
+        <div><dt>تاریخ افزودن</dt><dd>${fmtDate(b.created_at)}</dd></div>
+        ${files.length ? `<div><dt>فایل‌ها</dt><dd>${files.length.toLocaleString('fa-IR')} فایل (${fmtSize(files.reduce((t, f) => t + Number(f.files.size_bytes || 0), 0))})</dd></div>` : ''}
+      </dl>
+      <div class="book-files" data-files>${files.length ? '<span class="muted small">در حال آماده‌سازی…</span>' : '<span class="muted small">فایلی برای این کتاب ثبت نشده است.</span>'}</div>
+      <div class="book-actions">
+        <a class="btn sm ghost" href="#/content/${b.id}">صفحهٔ کتاب</a>
+        ${canManage ? `<a class="btn sm ghost" href="#/edit/${b.id}">ویرایش</a><button class="btn sm danger ghost" type="button" data-delcontent="${b.id}" data-title="${esc(b.title)}">حذف</button>` : ''}
+      </div>
+    </div></div></div>
+  </article>`;
+}
+
+async function fillBookFiles(card, b) {
+  const box = card.querySelector('[data-files]');
+  const files = (b.content_files || []).filter((x) => x.files);
+  if (!files.length || box.dataset.done) return;
+  box.dataset.done = '1';
+  const rows = files.map((x) => ({ ...x.files }));
+  const [view, dl] = await Promise.all([api.signedUrls(rows), api.signedUrls(rows, { download: true })]);
+  box.innerHTML = files.map((x) => {
+    const f = x.files, name = x.title || f.file_name, m = f.mime_type || '';
+    return `<div class="bfile"><span class="bname"><bdi>${esc(name)}</bdi> <span class="muted small">(${fmtSize(f.size_bytes)})</span></span>
+      <span class="btn-row">${m === 'application/pdf' && view[f.id] ? `<a class="btn sm" href="${esc(view[f.id])}" target="_blank" rel="noopener">مشاهدهٔ PDF</a>` : ''}
+      ${dl[f.id] ? `<a class="btn sm soft" href="${esc(dl[f.id])}" download="${esc(f.file_name)}">دانلود${m === 'application/pdf' ? ' PDF' : ''}</a>` : '<span class="muted small">در دسترس نیست</span>'}</span>
+      ${m.startsWith('audio/') && view[f.id] ? `<audio controls preload="none" src="${esc(view[f.id])}" style="width:100%;margin-top:.4rem"></audio>` : ''}</div>`;
+  }).join('');
+}
+
 export async function library(el) {
   el.innerHTML = `<div class="wrap">
     <div class="page-head"><h1>کتابخانهٔ مربیان</h1><p class="muted">کتاب‌ها و منابع کتابخانه‌ای</p>
     ${api.canEdit() ? '<a class="btn sm ghost" href="#/library/new">+ افزودن کتاب</a>' : ''}</div>
-    <div id="list"></div></div>`;
-  // مدیر همه‌ی کتاب‌ها را می‌تواند مدیریت کند؛ مربی فقط کتاب‌های خودش (دیتابیس هم همین را اعمال می‌کند)
-  const decorate = async (rows, box) => {
-    if (!api.canEdit()) return;
-    const { data } = await api.sb.from('contents').select('id,created_by').in('id', rows.map((r) => r.id));
-    const mine = new Set((data || []).filter((r) => api.isAdmin() || r.created_by === api.state.session.user.id).map((r) => r.id));
-    $$('li', box).forEach((li) => {
-      const id = /content\/([\w-]+)/.exec(li.querySelector('a.row')?.getAttribute('href') || '')?.[1];
-      if (!id || !mine.has(id) || li.querySelector('.row-del')) return;
-      li.classList.add('has-del');
-      li.insertAdjacentHTML('beforeend', `<a class="mini-del edit" href="#/edit/${id}">ویرایش</a><button class="mini-del row-del" type="button" data-delcontent="${id}" data-title="${esc(li.querySelector('.t')?.textContent || '')}">حذف</button>`);
-    });
+    <div id="list">${loading()}</div></div>`;
+  const box = $('#list', el);
+  const PAGE = 20; let offset = 0; const books = new Map();
+  const load = async (append) => {
+    try {
+      const { data, error } = await api.sb.from('contents')
+        .select('id,title,summary,author_name,created_at,created_by,content_files(*, files(id,storage_path,file_name,mime_type,size_bytes))')
+        .eq('in_library', true).eq('status', 'published').is('deleted_at', null)
+        .order('created_at', { ascending: false }).range(offset, offset + PAGE - 1);
+      if (error) throw error;
+      if (!append && !data.length) { box.innerHTML = emptyState('هنوز کتابی در کتابخانه نیست', 'کتاب‌هایی که با «افزودن کتاب» ثبت شوند این‌جا نمایش داده می‌شوند.'); return; }
+      if (!append) box.innerHTML = '<div class="books"></div><div class="btn-row" id="more-row" style="justify-content:center;margin-top:1rem"></div>';
+      data.forEach((b) => books.set(b.id, b));
+      const me = api.state.session?.user.id;
+      $('.books', box).insertAdjacentHTML('beforeend', data.map((b) => bookCard(b, api.canEdit() && (api.isAdmin() || b.created_by === me))).join(''));
+      offset += data.length;
+      const mr = $('#more-row', box);
+      mr.innerHTML = data.length === PAGE ? '<button class="btn ghost" type="button">نمایش بیشتر</button>' : '';
+      const mb = mr.querySelector('button'); if (mb) mb.onclick = () => withLock(mb, () => load(true));
+    } catch (e) { box.innerHTML = errorBox(friendlyError(e)); $('[data-retry]', box)?.addEventListener('click', () => library(el)); }
   };
-  $('#list', el).addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-delcontent]'); if (!b) return;
-    if (!(await confirmDialog({ title: 'حذف کتاب', text: `<p>«${esc(b.dataset.title)}» به سطل زباله منتقل می‌شود و دیگر در کتابخانه نمایش داده نمی‌شود. مدیر می‌تواند آن را بازیابی کند.</p>`, okText: 'انتقال به سطل زباله', danger: true }))) return;
-    try { await api.softDelete(b.dataset.delcontent); toast('کتاب به سطل زباله منتقل شد.', 'ok'); library(el); } catch (err) { toast(friendlyError(err), 'error'); }
+  box.addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-delcontent]');
+    if (del) {
+      if (!(await confirmDialog({ title: 'حذف کتاب', text: `<p>«${esc(del.dataset.title)}» به سطل زباله منتقل می‌شود و دیگر در کتابخانه نمایش داده نمی‌شود. مدیر می‌تواند آن را بازیابی کند.</p>`, okText: 'انتقال به سطل زباله', danger: true }))) return;
+      try { await api.softDelete(del.dataset.delcontent); toast('کتاب به سطل زباله منتقل شد.', 'ok'); library(el); } catch (err) { toast(friendlyError(err), 'error'); }
+      return;
+    }
+    const head = e.target.closest('.book-head'); if (!head) return;
+    const card = head.closest('.book'); const open = !card.classList.contains('open');
+    card.classList.toggle('open', open); head.setAttribute('aria-expanded', open);
+    if (open) fillBookFiles(card, books.get(card.dataset.id)).catch(() => { card.querySelector('[data-files]').innerHTML = '<span class="muted small">بارگذاری فایل‌ها ممکن نشد.</span>'; delete card.querySelector('[data-files]').dataset.done; });
   });
-  await pagedList($('#list', el), { library: true }, emptyState('هنوز کتابی در کتابخانه نیست', 'کتاب‌هایی که با «افزودن کتاب» ثبت شوند این‌جا نمایش داده می‌شوند.'), decorate);
+  await load(false);
 }
 
 // ---------- موضوعات و طرح درس‌ها ----------
@@ -186,6 +263,15 @@ export async function category(el, { params }) {
       });
     });
   }
+  // --- افکت لمس کارت زیرشاخه: فشرده‌شدن کوتاه، سپس ورود نرم ---
+  const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  $$('.subcard a.name', el).forEach((a) => a.addEventListener('click', (e) => {
+    if (calm || e.ctrlKey || e.metaKey || e.shiftKey || e.button) return; // حرکت کم یا باز کردن در تب جدید: رفتار عادی
+    e.preventDefault();
+    const card = a.closest('.subcard'); card.classList.add('pressed');
+    setTimeout(() => { location.hash = a.getAttribute('href'); }, 170);
+  }));
+
   // --- حذف زیرشاخه ---
   $$('[data-delcat]', el).forEach((b) => b.addEventListener('click', async () => {
     const c = by.get(b.dataset.delcat);
@@ -271,7 +357,7 @@ export async function contentPage(el, { params }) {
 
   const { by } = api.buildTree(cats);
   const paths = c.category_ids.map((id) => api.categoryPath(by, id)).filter((p) => p.length);
-  const files = c.files.map((x) => ({ ...x.files, description: x.description, cfId: x.id })).filter((f) => f.id);
+  const files = c.files.map((x) => ({ ...x.files, description: x.description, title: x.title || '', cfId: x.id })).filter((f) => f.id);
   const [viewUrls, dlUrls, related] = await Promise.all([
     api.signedUrls(files), api.signedUrls(files, { download: true }), api.fetchRelated(c).catch(() => [])
   ]);
@@ -311,7 +397,7 @@ function attachHtml(f, view, dl) {
     else if (isVideo(m)) preview = `<video controls preload="metadata" playsinline src="${esc(view)}">مرورگر شما پخش ویدئو را پشتیبانی نمی‌کند.</video>`;
     else if (m === 'application/pdf') preview = `<details style="margin-top:.5rem"><summary class="small" style="cursor:pointer;color:var(--wine)">پیش‌نمایش PDF</summary><iframe src="${esc(view)}" title="${esc(f.file_name)}"></iframe><p class="hint">اگر پیش‌نمایش در گوشی نمایش داده نشد، فایل را دانلود کنید.</p></details>`;
   }
-  return `<div class="att"><div class="top"><span class="name"><bdi>${esc(f.file_name)}</bdi> <span class="muted small">(${fmtSize(f.size_bytes)})</span></span>
+  return `<div class="att"><div class="top"><span class="name"><bdi>${esc(f.title || f.file_name)}</bdi> <span class="muted small">(${fmtSize(f.size_bytes)})</span></span>
     ${dl ? `<a class="btn sm soft" href="${esc(dl)}" download="${esc(f.file_name)}">دانلود</a>` : '<span class="muted small">فایل در دسترس نیست</span>'}</div>
     ${f.description ? `<p class="d">${esc(f.description)}</p>` : ''}${preview}</div>`;
 }

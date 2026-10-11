@@ -281,3 +281,61 @@ a.chip:hover { background: var(--blush-deep); }
 @media (min-width: 700px) { .hero-logo { width: 280px; margin: 1.1rem auto 1rem; } }
 .mini-del.edit { color: var(--wine); text-decoration: none; display: inline-flex; align-items: center; }
 .mini-del.edit:hover { background: var(--blush); }
+
+/* ---------- ضبط صدا ---------- */
+.recorder { border: 1.5px dashed var(--blush-deep); border-radius: var(--r-md); padding: .9rem; background: var(--cream); margin-top: .8rem; }
+.rec-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--danger); margin-left: .4rem; animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+
+/* ---------- انتقال نرم بین صفحه‌ها ---------- */
+main.page-in { animation: pageIn .28s ease-out; }
+@keyframes pageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ---------- افکت لمس کارت زیرشاخه ---------- */
+.subcard { transition: transform .18s cubic-bezier(.2,.8,.3,1), box-shadow .18s ease, border-color .18s ease, background-color .18s ease; -webkit-tap-highlight-color: transparent; }
+@media (hover: hover) { .subcard:hover { transform: translateY(-2px); } }
+.subcard:active, .subcard.pressed { transform: scale(.972); box-shadow: inset 0 3px 10px rgba(92,26,44,.16), 0 1px 2px rgba(92,26,44,.12); background-color: #FCF1F4; border-color: var(--wine-soft); transition-duration: .08s; }
+.subcard:active a.name svg, .subcard.pressed a.name svg { transform: scale(.94); }
+.subcard a.name svg { transition: transform .18s ease; }
+
+/* ---------- کارت کتاب‌های کتابخانه ---------- */
+.books { display: grid; gap: .8rem; grid-template-columns: 1fr; }
+@media (min-width: 760px) { .books { grid-template-columns: 1fr 1fr; align-items: start; } }
+.book { background: #fff; border: 1px solid var(--line); border-radius: 22px 8px 22px 8px; overflow: hidden; transition: box-shadow .2s, border-color .2s; }
+.book.open { border-color: var(--blush-deep); box-shadow: var(--shadow); }
+.book-head { display: flex; align-items: center; gap: .9rem; width: 100%; padding: .8rem 1rem .8rem .8rem; background: none; border: 0; font: inherit; color: inherit; text-align: right; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color .15s; }
+.book-head:active { background: #FCF1F4; }
+.cover-wrap { flex: none; width: 66px; }
+.cover { display: block; width: 100%; height: auto; overflow: visible; filter: drop-shadow(0 4px 5px rgba(92,26,44,.22)); transition: transform .25s ease; }
+.book.open .cover { transform: rotate(-2deg) translateY(-2px); }
+.cover .stand { stroke: #CDBDB6; }
+.cover .pages { fill: #F3ECE4; stroke: #E0D5CB; stroke-width: .8; }
+.cover .body { fill: var(--cv); }
+.cover .spine { fill: var(--cv-dark); }
+.cover .spine-line { stroke: var(--cv-ink); opacity: .35; }
+.cover .frame, .cover .rule { stroke: var(--cv-ink); opacity: .55; }
+.cover .ornament { color: var(--cv-ink); opacity: .85; }
+.cover.tone-0 { --cv: #8B2E46; --cv-dark: #6E2236; --cv-ink: #F6DDE3; }
+.cover.tone-1 { --cv: #CFA0AB; --cv-dark: #B98391; --cv-ink: #FFF3F5; }
+.cover.tone-2 { --cv: #EADFCB; --cv-dark: #D8C9AE; --cv-ink: #7F263D; }
+.cover.tone-3 { --cv: #BDB0D1; --cv-dark: #A094B9; --cv-ink: #FFFFFF; }
+.cover.tone-4 { --cv: #AFC2A8; --cv-dark: #94AB8C; --cv-ink: #FFFFFF; }
+.book-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .15rem; }
+.book-title { font-size: 1.2rem; font-weight: 800; color: var(--wine-deep); line-height: 1.55; overflow-wrap: anywhere; }
+.book-author { font-size: .95rem; color: var(--muted); }
+.book-badges { display: flex; gap: .4rem; margin-top: .2rem; }
+.badge-pdf { display: inline-block; font-size: .72rem; font-weight: 800; letter-spacing: .04em; color: #fff; background: var(--wine); border-radius: 6px; padding: 0 .5rem; line-height: 1.7; direction: ltr; }
+.badge-pdf.alt { background: var(--wine-soft); letter-spacing: 0; }
+.chev { flex: none; width: 10px; height: 10px; border-left: 2px solid var(--wine-soft); border-bottom: 2px solid var(--wine-soft); transform: rotate(-45deg); transition: transform .25s ease; margin-inline-start: .2rem; }
+.book.open .chev { transform: rotate(-135deg); }
+.book-details { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s ease; }
+.book.open .book-details { grid-template-rows: 1fr; }
+.book-details > .inner { overflow: hidden; }
+.book-details .pad { padding: .2rem 1rem 1rem; border-top: 1px dashed var(--blush-deep); margin: 0 .8rem; padding-inline: .2rem; padding-top: .8rem; }
+.book-desc { margin: 0 0 .7rem; color: #44383d; line-height: 1.95; }
+.specs { margin: 0 0 .8rem; display: grid; gap: .25rem; font-size: .92rem; }
+.specs div { display: flex; gap: .5rem; } .specs dt { color: var(--muted); min-width: 6.5rem; } .specs dd { margin: 0; font-weight: 500; }
+.bfile { background: var(--cream); border: 1px solid var(--line); border-radius: 14px; padding: .6rem .8rem; margin-bottom: .5rem; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; }
+.bfile .bname { overflow-wrap: anywhere; font-weight: 700; flex: 1 1 180px; }
+.book-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .6rem; }
+@media (prefers-reduced-motion: reduce) { .book-details, .cover, .chev, .subcard { transition: none !important; } main.page-in { animation: none; } }
